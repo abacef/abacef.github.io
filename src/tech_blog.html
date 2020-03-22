@@ -1,0 +1,66 @@
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<script src="blog_common.js"></script>
+<body>
+    <div id="skeleton"></div>
+
+    <div id="blog-post-or-list" style="margin-top: 30px; padding: 20px">
+        <h1 id="titl"></h1>
+        <i><div id="date-published"></div></i>
+        <div id="post-content"></div>
+        <style>
+            code span.al { color: #ff0000; font-weight: bold; } /* Alert */Add commentMore actions
+            code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+            code span.at { color: #7d9029; } /* Attribute */
+            code span.bn { color: #40a070; } /* BaseN */
+            code span.bu { color: #008000; } /* BuiltIn */
+            code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+            code span.ch { color: #4070a0; } /* Char */
+            code span.cn { color: #880000; } /* Constant */
+            code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+            code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+            code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+            code span.dt { color: #902000; } /* DataType */
+            code span.dv { color: #40a070; } /* DecVal */
+            code span.er { color: #ff0000; font-weight: bold; } /* Error */
+            code span.ex { } /* Extension */
+            code span.fl { color: #40a070; } /* Float */
+            code span.fu { color: #06287e; } /* Function */
+            code span.im { color: #008000; font-weight: bold; } /* Import */
+            code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+            code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+            code span.op { color: #666666; } /* Operator */
+            code span.ot { color: #007020; } /* Other */
+            code span.pp { color: #bc7a00; } /* Preprocessor */
+            code span.sc { color: #4070a0; } /* SpecialChar */
+            code span.ss { color: #bb6688; } /* SpecialString */
+            code span.st { color: #4070a0; } /* String */
+            code span.va { color: #19177c; } /* Variable */
+            code span.vs { color: #4070a0; } /* VerbatimString */
+            code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+        </style>
+    </div>
+
+    <script>
+        const blogs_map = [
+            [6, "My first open source contribution", "28 Aug 2025"],
+            [5, "What you dont know (in networking) can hurt you", "28 Aug 2025"],
+            [4, "Be careful of Python for loops (or Python in general)", "29 Jul 2025"],
+            [3, "Downsides of Alpine linux", "27 Jun 2025"],
+            [2, "Create a custom ORM", "27 Jun 2025"],
+            [1, "Generate your API objects", "11 May 2025"]
+        ]
+
+        populateElementWithFile("skeleton", "index.html")
+
+        const blogPost = findBlogPost(blogs_map)
+        if (blogPost) {
+            document.getElementById("titl").innerHTML = blogPost[1]
+            document.getElementById("date-published").innerHTML = blogPost[2]
+            populateElementWithFile('post-content', `/tech_blog/${blogPost[0]}.html`)
+        } else {
+            document.getElementById('blog-post-or-list').innerHTML = `<h1>Software Engineering Blog Posts</h1>${blogPostListHtml(blogs_map, "tech_blog")}`;
+        }
+    </script>
+</body>

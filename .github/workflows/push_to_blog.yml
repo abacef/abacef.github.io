@@ -1,0 +1,63 @@
+name: push to blog repo
+
+on:
+  push:
+    branches:
+      - src
+
+permissions:
+  contents: write
+
+
+jobs:
+  commit-to-other-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the source branch here
+        uses: actions/checkout@v6
+        with:
+          ref: src
+
+      - name: Checkout the destination branch in a folder
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: target-repo
+
+      - name: Copy html files
+        run: |
+          rm -r ./target-repo/*
+          cp -r ./src/*.html ./src/*.js ./target-repo/
+
+          mkdir ./target-repo/assets
+          cp -r ./assets/* ./target-repo/assets
+
+
+      - name: install pandoc
+        uses: pandoc/actions/setup@v1
+        with:
+          version: '3.5'
+
+      - name: Convert all Markdown files to HTML
+        run: |
+          mkdir -p ./target-repo/tech_blog
+          for file in $(find ./src/tech_blog/ -name "*.md"); do
+            out="./target-repo/tech_blog/$(basename "${file%.md}.html")"
+            pandoc "$file" -o "$out"
+          done
+
+          mkdir -p ./target-repo/bike_blog
+          for file in $(find ./src/bike_blog/ -name "*.md"); do
+            out="./target-repo/bike_blog/$(basename "${file%.md}.html")"
+            pandoc "$file" -o "$out"
+          done
+  
+
+      - name: Commit and push changes
+        run: |
+          cd target-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Automated build from blog source"
+          git push
