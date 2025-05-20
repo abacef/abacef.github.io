@@ -1,1 +1,131 @@
-<h1 id="dis-is-post-1">dis is post 1</h1>
+<p>I am creating an public API that frontend engineers in my company
+will need to consume. Protobuf is great, GraphQL is shiny, a bit
+over-engineered and will take a while for the engineers at our company
+to ramp up on, but we decided to use REST because of our engineers’
+farmiliarity with it.</p>
+<p>At a past company I worked at, there was internal tooling to write an
+API schema using a proprietary markup language, and then it would
+generate objects in many programming languages so you could instantiate
+them and simply send them across the network with one function call over
+REST. Now that I am not at that company anymore I was thinking of open
+source ways to do this.</p>
+<p>OpenAPI seemed like a great candidate. The spec seems like it is
+climaxing in maturity and on the serface, it seemed like there were a
+lot of tools to generate client and server code in many languages. Since
+I am writing the server in <a href="https://www.rust-lang.org/">Rust</a>
+using <a href="https://rocket.rs/">Rocket</a>, I tried out some Rust
+server object generation tools, and they just simply did not work, or
+were too complicated or were too over-engineered or a combination of
+those three, but I was not willing to take too long to find out. All I
+was looking for is for simple structs to be generated like
+CreateUserRequest, and CreateUserResponse.</p>
+<p>Since I assumed client generation of an OpenAPI spec to Swift or
+Javascript would be well supported, I wondered if I could generate an
+OpenAPI schema from manually created Rust structs for my Rocket project.
+Luckilly the <a href="https://docs.rs/utoipa/latest/utoipa/">utoipa</a>
+crate exists which does exactly that, and it even intelligently parses a
+project written for the Rocket web framework. API development was going
+smoothly and I was happy until I started testing some APIs, especially
+String inputs with length bounds. Here is an example API Request struct
+that I wrote</p>
+<pre><code>#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct CreateUserRequest {
+    #[validate(length(min = 3, max = 120))]
+    pub username: String,
+}</code></pre>
+<p>The struct has a field username which must be between 3 and 120
+characters. The generated OpenAPI schema did not specify this
+though:</p>
+<pre><code>CreateUserRequest:
+    type: object
+    required:
+    - username
+    properties:
+    username:
+        type: string
+        # minLength: 3 &lt;- Missing!
+        # maxLength: 120 &lt;- Missing!</code></pre>
+<p>This is important to have so that the frontend engineers can have an
+easier time implementing their APIs and will save time for me having to
+manually figure out what the string length bounds on every API field is
+during every API version release.</p>
+<p>I considered writing a script that takes in the Rust web server code
+and the generated OpenAPI schema and updates the schema retroactively,
+but that seemed like a painful and flaky solution. There had to be
+another way.</p>
+<p>Then I realized that JsonSchema supports string lengths, and with its
+wide adoption there should easilly be a crate that generated a
+JsonSchema from my Rocket server code so I can give the schema to the
+frontend engineer. It wont have the API paths or response types
+specifically like OpenAPI would but would be fully automated other than
+that for me. Better yet what if I write JsonSchema and have it generate
+the Rust structs for me.</p>
+<p>There are many JsonSchema to Rust struct converters like Like <a
+href="https://github.com/abdullah-albanna/schema2struct">schema2struct</a>
+but like with utoipa, there is no crate that will support string length
+validation checking. for example this schema</p>
+<pre><code>{
+  &quot;title&quot;: &quot;CreateUserRequest&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;username&quot;],
+  &quot;properties&quot;: {
+    &quot;username&quot;: {
+      &quot;type&quot;: &quot;string&quot;,
+      &quot;minLength&quot;: 3,
+      &quot;maxLength&quot;: 120
+    }
+  },
+  &quot;additionalProperties&quot;: false
+}</code></pre>
+<p>will only generate this plain sad struct</p>
+<pre><code>pub struct CreateUserRequest {
+    pub username: String,
+}</code></pre>
+<p>Before I was going to give up and start considering using Protobuf, I
+was brainstorming how hard it would be to parse a JsonSchema document
+manually and generate the rust structs. Since I had experience with
+using Rust ProcMacros in the past, I considered it would not take more
+than one week to do. In fact it only took 3 working days! Finally I have
+mostly automated Rest API generation.</p>
+<p>For a more full example, here is more useful and robust
+CreateUserRequest JsonSchema document:</p>
+<pre><code>{
+  &quot;title&quot;: &quot;CreateUserRequest&quot;,
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;properties&quot;: {
+    &quot;username&quot;: {
+      &quot;type&quot;: &quot;string&quot;,
+      &quot;minLength&quot;: 3,
+      &quot;maxLength&quot;: 120
+    },
+    &quot;userId&quot;: {
+      &quot;type&quot;: &quot;integer&quot;,
+      &quot;minimum&quot;: 0,
+      &quot;maximum&quot;: 4294967295
+    },
+    &quot;tags&quot;: {
+      &quot;type&quot;: &quot;array&quot;,
+      &quot;items&quot;: {
+        &quot;type&quot;: &quot;string&quot;,
+        &quot;minLength&quot;: 1,
+        &quot;maxLength&quot;: 50
+      }
+    }
+  },
+  &quot;required&quot;: [&quot;username&quot;, &quot;userId&quot;, &quot;tags&quot;],
+}</code></pre>
+<p>My generator will generate the struct:</p>
+<pre><code>use validator::Validate;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Validate, Deserialize, Serialize)]
+pub struct CreateUserRequest {
+    #[validate(length(min = 3, max = 120))]
+    pub username: String,
+
+    #[validate(range(min = 0, max = 4_294_967_295))]
+    pub user_id: u32,
+
+    #[validate(length(min = 1, max = 50, each))]
+    pub tags: Vec&lt;String&gt;,
+}</code></pre>
