@@ -1,0 +1,61 @@
+<p>Alpine is great</p>
+<ul>
+<li>The installation size is small</li>
+<li>Not many services run in the background which does not stress the
+CPU or memory.</li>
+<li>The alpine package manager (apk) is super simple and has all the
+features I need. Also there is no need to autoremove packages</li>
+<li>It is easy to register a script to run on startup</li>
+</ul>
+<p>I have been running alpine on some VMs to host various long-lived
+services and/or containers for about a year now and it is pretty good
+but I would not be opposed to finding a new general-purpose go-to
+operating system. Here are some of the reasons</p>
+<h2 id="musl">musl</h2>
+<p>Alpine uses musl as its C standard library. I dont have any issues
+with the concept or implementation of musl, I actually like the idea,
+but the biggest issue is not all software vendors prioritize it for
+support.</p>
+<p>For example, I wanted to use fluent bit to send logs/metrics to my
+aggregation service, but it is only available through apk in the testing
+channel. Also fluent bit does not support musl compilation out of the
+box, so a bunch of hacks need to be done to make it work as shown in the
+patch files in the <a
+href="https://gitlab.alpinelinux.org/alpine/aports/-/tree/master/testing/fluent-bit">repo</a>
+for the alpine build of fluent bit.</p>
+<p>Another example is I once wanted to compile a rust binary on alpine
+targeting the target that compiles all of musl into the binary itself so
+you dont have to worry about what C standard library the host uses
+<code>--target=x86_64-unknown-linux-musl</code>, but since my rust
+project needed to use openssl, I was having issues with downloading and
+having it find the openssl cross compilation libraries on the OS, so
+much so that after a day of trying to get it to work, I had to switch to
+targeting debian since compilation seemed to just work after downloading
+the package <code>libssl-dev</code></p>
+<h2 id="ash">ash</h2>
+<p>Since alpine depends on BusyBox, it uses <code>ash</code> as the
+shell implementation. I understand that it is small and simple, but
+everyone else uses <code>bash</code>. One of the reasons why people like
+writing bash scripts is they are just text that can usually be run on
+just about any host rignt? (right?) well I guess not in OSes running
+ash. You would think the syntax is similar, but it is different enough
+where you really have to worry about supporting these different shell
+implementations.</p>
+<p>One example is the following code in bash to check for the presence
+of an environment variable</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="kw">[[</span> <span class="ot">!</span> <span class="ot">-v</span> ENV_VAR <span class="kw">]];</span> <span class="cf">then</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="bu">echo</span> <span class="st">&quot;ENV_VAR needs to be set&quot;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="bu">exit</span> 1</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="cf">fi</span></span></code></pre></div>
+<p>needs to be written differently in ash</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="bu">[</span> <span class="ot">-z</span> <span class="st">&quot;</span><span class="va">${ENV_VAR</span><span class="op">:-</span><span class="va">}</span><span class="st">&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="bu">echo</span> <span class="st">&quot;ENV_VAR needs to be set&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="bu">exit</span> 1</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">fi</span></span></code></pre></div>
+<p>😤</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>As with most things, choosing an operating system is always a
+trade-off, there is not one operating system to end all operating
+systems (alpine gets close), but it is at least exciting to believe one
+is possible.</p>
