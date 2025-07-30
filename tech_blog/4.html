@@ -1,0 +1,106 @@
+<p>So I unintentionally pushed a bug to production once. When it was
+found, it made one of my usually reserved co-workers exclaim “I hate
+Python”</p>
+<h2 id="the-code">The Code</h2>
+<p>The problem statement was that I had to go through a list and if any
+items in a list were in another list, filter them out. This is the code
+I wrote.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> item <span class="kw">in</span> list_to_filter:</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> item <span class="kw">in</span> removable_items:</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        list_to_filter.remove(item)</span></code></pre></div>
+<p>Here is a unit test I probably wrote for this code</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>list_to_filter <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;a&quot;</span>, <span class="st">&quot;c&quot;</span>, <span class="st">&quot;e&quot;</span>, <span class="st">&quot;f&quot;</span>]</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>removable_items <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;e&quot;</span>]</span></code></pre></div>
+<p>Which is a usual example of the distribution of the things we needed
+to filter, and it worked. After releasing to production though, we found
+an issue, the resulting list was not removing all the items in some
+cases.</p>
+<h2 id="the-investigation">The Investigation</h2>
+<p>While I was in the thick of working on another project, my manager
+assigned another person to work on fixing this bug. After two days (and
+nights) of looking at this pretty bad bug, he was able to find the
+issue. Here is a test case that fails</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>list_to_filter <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;a&quot;</span>, <span class="st">&quot;c&quot;</span>, <span class="st">&quot;e&quot;</span>, <span class="st">&quot;f&quot;</span>]</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>removable_items <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>]</span></code></pre></div>
+<p>was returning a filtered list</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>, <span class="st">&quot;e&quot;</span>, <span class="st">&quot;f&quot;</span>]</span></code></pre></div>
+<p>without filtering out the <code>"b"</code>. Do you spot the issue
+yet?</p>
+<p>Was it not looking at the whole list to filter out the
+<code>b</code>? But if we put the <code>"b"</code> at the end of the
+list to filter, it would get filtered out</p>
+<p>Here is a min repro of the issue</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>list_to_filter <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;a&quot;</span>]</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>removable_items <span class="op">=</span> [<span class="st">&quot;a&quot;</span>]</span></code></pre></div>
+<p>Would result in</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;a&quot;</span>]</span></code></pre></div>
+<p>Do you spot the issue yet?</p>
+<p>So apparently Python converts this code into something like a
+counting for loop at runtime, effectively de-sugaring my code into</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(list_to_filter)):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    item <span class="op">=</span> list_to_filter[i]</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> item <span class="kw">in</span> removable_items:</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        list_to_filter.remove(item)</span></code></pre></div>
+<p>but notably it does not fail when the list range is out of bounds
+somehow</p>
+<p>Now that I revealed about the out of bounds thing, do you spot the
+issue now?</p>
+<p>Ok I am going to tell you the issue now.</p>
+<h2 id="code-trace-of-the-bug">Code Trace of the bug</h2>
+<p>Essentially when the list needs to go to the next item, it does not
+loop <strong>for all the items in the list to filter</strong> like it
+seems like I did in plain english, it just goes essentially to the next
+index each loop which means if the previous loop removed an element at
+index 1, the next index in the loop will be index 2, but the one that is
+now at index 1 was the one that was previously in index 2 but it got
+skipped over.</p>
+<p>Code trace for the min repro:</p>
+<ol type="1">
+<li>The first item in the list to filter is an “a”</li>
+<li>Is this “a” in the removable items? yes it is, so remove the
+specific instance of this “a”</li>
+<li>The list to filter is now [“a”]</li>
+<li>Going on to the next iteration of the for loop, the second item in
+the list to filter is… wait there is no second item in the list? I guess
+we are done?</li>
+</ol>
+<p>The person who fixed the bug asked me to review the fix. I forgot
+what the fix was but it passed the test cases that were failing before
+so I approved the review.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>So what could have been done differently in the future to prevent
+this bug? Well like all things it is complicated.</p>
+<p>We were running this filtering code in a different service than the
+code that needed to be in python so it did not have to be written in
+python. This service started as a proof of concept in Python but when
+worked good enough and did not have any bugs yet, the ticket to convert
+it to another language was a low priority apart from a few engineers
+raising the alarm bells of Python’s issues (slow, high memory, lack of
+real threads, weak typeness). This code in Java would throw a
+<code>ConcurrentModificationException</code> at runtime instead of
+modifying the list, and in Rust, the code will not even compile if there
+is a modification of the list being iterated over.</p>
+<p>The culture of the lack of care of this service translated into my
+intentional choice of using a slower filtering algorithm in order to
+ship the product faster. The reviewer of my code probably noticed this
+choice but was as disolusioned as me as to the lack of effert we have
+put into this service for years that they did not even put in the effort
+to mention the slow algorithm choice.</p>
+<p>Even though we could have pushed more for the service to be
+re-written and pushed more to take some sprint effort to clean up the
+code, would I do this any differently in the future? Probably not
+actually as long as I am working at a company with a high priority to
+push products out fast. Would it have been better to write the proof of
+concept in a different language? Maybe if it was ok for the release to
+be pushed back some time or people’s promotions to be pushed back.
+Sometimes time to market matters and sometimes less code bugs matter and
+sometimes peoples promotions matter more but there is usually always a
+tradeoff. Unfortunately I dont think I am smart enough, mature enough,
+or experienced enough to know the best trade-off.</p>
