@@ -9,16 +9,15 @@ I wrote.</p>
 class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> item <span class="kw">in</span> list_to_filter:</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> item <span class="kw">in</span> removable_items:</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        list_to_filter.remove(item)</span></code></pre></div>
-<p>Here is a unit test I probably wrote for this code</p>
+<p>Here is a unit test I probably wrote for this code, typical of
+production traffic</p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>list_to_filter <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;a&quot;</span>, <span class="st">&quot;c&quot;</span>, <span class="st">&quot;e&quot;</span>, <span class="st">&quot;f&quot;</span>]</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>removable_items <span class="op">=</span> [<span class="st">&quot;a&quot;</span>, <span class="st">&quot;e&quot;</span>]</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>answer <span class="op">=</span> [<span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>, <span class="st">&quot;f&quot;</span>]</span></code></pre></div>
-<p>Which is a usual example of the distribution of the things we needed
-to filter, and it worked. After releasing to production though, we found
-an issue, the resulting list was not removing all the items in some
-cases.</p>
+<p>After releasing to production though, we found an issue, the
+resulting list was not removing all the items in some cases.</p>
 <h2 id="the-investigation">The Investigation</h2>
 <p>While I was in the thick of working on another project, my manager
 assigned another person to work on fixing this bug. After two days (and
