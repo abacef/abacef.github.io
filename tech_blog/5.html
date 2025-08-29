@@ -142,6 +142,18 @@ packets will not be fragmented if sent or received with a MTU of
 1420.</p>
 <p>Trying the client to client test, we get the same MTU discovery, but
 with the usual worse ping results.</p>
+<h2 id="git-push-issues">Git push issues</h2>
+<p>I was on the VPN one day and tried to push come code, and it was
+hanging as usual, so as usual I go to disconnect my VPN and I get a
+response from the terminal that I had not got in the past</p>
+<pre><code>$ git push
+Connection reset by 140.82.116.4 port 22</code></pre>
+<p>Hmm port 22, isnt that SSH? Why is git using SSH? Then I realized
+duh, that is what git uses when you set up a repo cloned by SSH, which
+is what I did. This must be the same root cause as the issue with not
+being able to SSH into a server, it getting stuck waiting for a reply.
+At least I feel a little better about that, still dont know what the
+issue is though.</p>
 <h1 id="conclusion">Conclusion</h1>
 <p>Currently I dont know something about networking and/or tunnels, and
 it is killing me.</p>
