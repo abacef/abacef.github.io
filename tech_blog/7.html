@@ -129,8 +129,13 @@ $ &lt;install Calico CRD&gt;</code></pre>
 <p>k3s markets itself as a simple way to deploy kubernetes, but this is
 only true if you have a simple use case, it pretty much pushes you
 towards deploying all the components of your cluster from scratch with
-every edge case not well thought out. This is not a bad thing though,
-because frequently I wonder if you do not know how to deploy your own
-kubernetes cluster from scratch anyway, should you be given the
-privelage to use kubernetes at all? If one thing starts to not work, you
-will have to learn how to anyway</p>
+every edge case not well thought out. To give credit where credit is
+due, they do give you quite a few options to choose what components of a
+cluster to deploy with wether it be choosing which CNI protocol to use
+(wireguard/VXLAN via Flannel) or choosing which cluster database to use
+(ETCD/Postgres/sqlite via KINE)</p>
+<p>Not catching every edge case is not bad though, because frequently I
+wonder if you do not know how to deploy your own kubernetes cluster from
+scratch anyway, should you be given the privelage to use kubernetes at
+all? If one thing starts to not work, you will have to learn how to
+anyway</p>
