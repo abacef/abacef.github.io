@@ -1,0 +1,136 @@
+<p>Kubernetes has been super useful for me, it allows me to have
+infrastructure as yml files. given the cluster is set up. I have only
+ever used k3s to set up a cluster, and I have mixed feelings. Here they
+are</p>
+<p>TL;DR: If you dont know how to deploy kubernetes from scratch, should
+you be using kubernetes at all?</p>
+<h2 id="single-node-is-simple">✅ Single node is simple</h2>
+<p>To set up a single node cluster, you simply need to run one command
+like it says on their website
+<code>curl -sfL https://get.k3s.io | sh -</code> and it works pretty
+well. The only thing is it does use a lot of memory like .75G, not sure
+if this is useful or just garbage that has not been cleaned up (lets
+re-write it in Rust instead of Go anyone?). For example a single node
+k3s cluster should ideally not use any more memory than installing
+docker on the system, but it is. Its ok, memory is not expensive at all
+now adays anyway.</p>
+<h2 id="multinode-is-simple-and-secure">✅ Multinode is simple and
+secure</h2>
+<p>Spinning up a multinode cluster is simple, just run
+<code>--cluster-init</code> for the first node and create a joinable
+secret so that no other nodes can join without knowing the secret.</p>
+<pre><code>curl -sfL https://get.k3s.io | K3S_TOKEN=SECRET sh -s - server --cluster-init</code></pre>
+<p>Then for the next nodes, pass in the secret and the API server
+address of the first node</p>
+<pre><code>curl -sfL https://get.k3s.io | K3S_TOKEN=SECRET sh -s - server \
+    --server https://&lt;ip or hostname of server1&gt;:6443</code></pre>
+<h2 id="issue-1-secrets-encryption">😕 Issue 1: secrets encryption</h2>
+<p>For some reason by default k3s does not encrypt kubernetes secrets
+resources, they are just put in the database unencrypted. This is not
+the worst depending on your threat model but why not just have them
+encrypted anyway. Linkilly it is just one cluster initialization
+parameter</p>
+<pre><code>curl -sfL https://get.k3s.io | K3S_TOKEN=$secret sh -s - server --cluster-init --secrets-encryption </code></pre>
+<h2 id="issue-2-default-lb">😕 Issue 2: Default LB</h2>
+<p>One of the most widely used load balancers used in the kubernetes
+ecosystem is Metal LB. This is a failover load balancer where instead of
+connecting incoming requests round robin to various backends, it uses
+layer 2 IP address advertizements to decide the backend that is serving
+the request at a time, if that fails, another backend picks up the l2
+advertizements. In my use case this is exactly what I am looking for
+since I dont want to manage IP addresses outside of kubernetes</p>
+<p>One of the drawbacks to this method of load balancing is if a backend
+is overloaded either serving a request or receiving/sending the max
+amount of network traffic that link can handle, it will start failing
+over, already possibly degrading the service. This is less likely to
+happen with round robin based load balancing. This should not be a
+problem with most k3s use cases since it is geared towards small
+deployments and they would not be handling a lot of traffic</p>
+<p>By default k3s ships with a load balancer called <a
+href="https://github.com/k3s-io/klipper-lb">ServiceLB</a>. It does not
+seem that useful, it is like a ClusterIP served through a NodePort. I
+want to deal specifically with IP addresses, so I needed to install
+Metal LB and disable ServiceLB when spinning up the service</p>
+<p>Installing k3s so far:</p>
+<pre><code>$ curl -sfL https://get.k3s.io | K3S_TOKEN=$secret sh -s - server --cluster-init --secrets-encryption --disable=servicelb
+$ &lt;install metal LB CRDs&gt;</code></pre>
+<h2 id="issue-3-bundled-traefik">😕 Issue 3: Bundled Traefik</h2>
+<p>Traefik is yet another HTTP/S reverse proxy implementation modeled as
+an “ingress” implementation. I have no issues with it so far, but I do
+have an issue with the fact that it is bundled with k3s. My use case
+specifically, I want to serve both public services and private services
+through the same cluster (this means both public and private IP
+addresses assigned to the cluster).</p>
+<p>You cannot securely use the same reverse proxy for this since there
+is no way to differentiate that even though a request came from the
+public internet through the public IP address, it still hits the same
+load balancer as the internal services, which means with a well crafted
+HTTP request, it can hit private services not intending to be exposed to
+the public internet (see spoofing the host header)</p>
+<p>It may be possible to seperate this traffic, but it would be a lot of
+effort and probably error prone and a maintenence nightmare too, so an
+easier way is to use two seperate instances of Traefik, each exposed on
+their own Metal LB IP address (one public, one private) therefore the
+same ingress is not serving both public and private requests. Since I
+need to run 2 instances of Traefik, and there is not one single
+parameter in k3s to say deploy 2, let me just deploy both manually with
+CRDs</p>
+<p>Installing k3s so far:</p>
+<pre><code>$ curl -sfL https://get.k3s.io | K3S_TOKEN=$secret sh -s - server --cluster-init --secrets-encryption --disable=servicelb --disable=traefik 
+$ &lt;install metal LB CRDs&gt;
+$ &lt;install Traefik CRDs for the first instance&gt;
+$ &lt;install Traefik CRDs for the second instance&gt;</code></pre>
+<h2 id="issue-4-unencrypted-cni-by-default">😕 Issue 4: Unencrypted CNI
+by default</h2>
+<p>So this is not the worst but the inter-node communication is done by
+default using the VXLAN protocol, which is pretty much L2 packets
+tunneled over UDP to the node it needs to go to, then the kernel sends
+it on its marry L2 way. The issue is that this is not encrypted so a
+network evesdropper can see all the traffic. You would be wrong to say
+that since we are using HTTPS in the cluster all of this is encrypted
+anyway because the ingress controller actually unencrypts the packets
+before sending them to the correct node to be served.</p>
+<p>If your threat model is that if an attacker can evesdrop on the
+network the k3s cluster is sending stuff between anyway, it is already
+game over, you are fine, but why not just encrypt it anyway. It may take
+2% network bandwidth overhead or whatever to do this, which is not alot,
+and the Wireguard protocol is optimized in the linux kernel anyway, so
+there should not be much latency or CPU overhead either.</p>
+<pre><code>$ curl -sfL https://get.k3s.io | K3S_TOKEN=$secret sh -s - server --cluster-init --secrets-encryption --disable=servicelb --disable=traefik  --flannel-backend=wireguard-native
+$ &lt;install metal LB CRDs&gt;
+$ &lt;install Traefik CRDs for the first instance&gt;
+$ &lt;install Traefik CRDs for the second instance&gt;</code></pre>
+<h2 id="issue-5-flannel-does-not-work-after-a-while">😭 Issue 5: Flannel
+does not work after a while</h2>
+<p>I was testing a case of my 3 node cluster loosing one node, and still
+being able to function, since a majority still exists. ETCD was able to
+switch leaders just fine, but when I brought the node back up, something
+weird happened. A few of the pods that the cluster was serving on that
+node did not come back up but had the status of either error or
+unknown!</p>
+<p>Describing the pods showed an error message</p>
+<pre><code>&quot;Error syncing pod, skipping&quot; err=&quot;failed to \&quot;CreatePodSandbox\&quot; for \&quot;longhorn-manager-2d6cw_longhorn-system(fe3d388b-4766-4585-9cf2-ab677ca2f6e9)\&quot; with CreatePodSandboxError: \&quot;Failed to create sandbox for pod \\\&quot;longhorn-manager-2d6cw_longhorn-system(fe3d388b-4766-4585-9cf2-ab677ca2f6e9)\\\&quot;: rpc error: code = Unknown desc = failed to setup network for sandbox \\\&quot;91e16400f64262f5ab20bb4c83c8adb72a85ddc45ddebb483a02a26012869d4c\\\&quot;: plugin type=\\\&quot;flannel\\\&quot; failed (add): failed to load flannel &#39;subnet.env&#39; file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.\&quot;&quot; pod=&quot;longhorn-system/longhorn-manager-2d6cw&quot; podUID=&quot;fe3d388b-4766-4585-9cf2-ab677ca2f6e9&quot;</code></pre>
+<p>This is a scary message, why was flannel not coming up? I checked and
+there is no file called <code>/run/flannel/subnet.env</code> on the
+node, even though there should be. I checked the other two nodes and yes
+they have this file. So that means I cannot restart the node at all or
+else that node will never be usable again? I really dont want to have to
+delete the node and add another one every time something happens! (maybe
+I should do this anyway as immutable deployments, but I digressed)</p>
+<p>What if I just dont use flannel at all, and install the well-loved
+Calico instead? Lickilly there is prescident for this, you just install
+k3s without a CNI, and bolt one on later</p>
+<pre><code>$ curl -sfL https://get.k3s.io | K3S_TOKEN=$secret sh -s - server --cluster-init --secrets-encryption --disable=servicelb --disable=traefik  --flannel-backend=none
+$ &lt;install metal LB CRDs&gt;
+$ &lt;install Traefik CRDs for the first instance&gt;
+$ &lt;install Traefik CRDs for the second instance&gt;
+$ &lt;install Calico CRD&gt;</code></pre>
+<h2 id="conclusion">Conclusion 🤔</h2>
+<p>k3s markets itself as a simple way to deploy kubernetes, but this is
+only true if you have a simple use case, it pretty much pushes you
+towards deploying all the components of your cluster from scratch with
+every edge case not well thought out. This is not a bad thing though,
+because frequently I wonder if you do not know how to deploy your own
+kubernetes cluster from scratch anyway, should you be given the
+privelage to use kubernetes at all? If one thing starts to not work, you
+will have to learn how to anyway</p>
