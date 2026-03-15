@@ -24,9 +24,14 @@ jobs:
           ref: main
           path: target-repo
 
-      - name: Copy html files
+      - name: prepare clean build directory
         run: |
           rm -r ./target-repo/*
+          cat myjunq.net > ./target-repo/CNAME
+
+
+      - name: Copy html files
+        run: |
           cp -r ./src/*.html ./src/*.js ./target-repo/
 
           mkdir ./target-repo/assets
