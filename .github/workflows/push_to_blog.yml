@@ -27,7 +27,7 @@ jobs:
       - name: prepare clean build directory
         run: |
           rm -r ./target-repo/*
-          cat myjunq.net > ./target-repo/CNAME
+          echo "myjunq.net" > ./target-repo/CNAME
 
 
       - name: Copy html files
